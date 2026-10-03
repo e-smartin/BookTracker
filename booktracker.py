@@ -85,12 +85,12 @@ def ask_int(label, low, high=None, hint="", optional=False, extra=()):
 def ask_date(label):
     """Ask for a date. An empty answer means today."""
     while True:
-        answer = ask(label, "YYYY-MM-DD, Enter = today")
+        answer = ask(label, "DD/MM/YYYY, Enter = today")
         if not answer:
             return date.today()
         day = parse_date(answer)
         if day is None:
-            warn("Please use the YYYY-MM-DD format, e.g. 2026-09-14.")
+            warn("Please use the DD/MM/YYYY format, e.g. 14/09/2026.")
         elif day > date.today():
             warn("That date is in the future.")
         else:
@@ -98,7 +98,7 @@ def ask_date(label):
 
 
 def parse_date(text):
-    for pattern in ("%Y-%m-%d", "%d/%m/%Y"):
+    for pattern in ("%d/%m/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(text, pattern).date()
         except ValueError:
@@ -163,14 +163,14 @@ def plural(count, word):
     return f"{count:,} {word}" + ("" if count == 1 else "s")
 
 
-def long_date(iso):  # "2026-09-05" -> "5 Sep 2026"
+def long_date(iso):  # "2026-09-05" -> "05/09/2026"
     day = date.fromisoformat(iso)
-    return f"{day.day} {day:%b %Y}"
+    return f"{day:%d/%m/%Y}"
 
 
-def short_date(iso):  # "2026-09-05" -> " 5 Sep"
+def short_date(iso):  # "2026-09-05" -> "05/09/2026"
     day = date.fromisoformat(iso)
-    return f"{day.day:>2} {day:%b}"
+    return f"{day:%d/%m/%Y}"
 
 
 def month_name(month):  # "2026-09" -> "Sep 2026"
@@ -226,7 +226,7 @@ def banner():
     """The app name next to a tiny bookshelf (book heights are in half-lines, 1 to 6)."""
     today = date.today()
     beside = [bold("B O O K T R A C K E R"), dim("every page counts"),
-              dim(f"{today:%A} {today.day} {today:%B %Y}")]
+              dim(f"{today:%A} {today:%d/%m/%Y}")]
     print()
     for row, text in enumerate(beside):
         level = 5 - 2 * row  # the half-line at the bottom of this row
@@ -239,7 +239,7 @@ def banner():
 def show_menu(books):
     print(f"\n  {summary(books)}\n")
     for key, label in [("1", "Add a new book"), ("2", "Update progress"),
-                       ("3", "Check library"), ("q", "Quit")]:
+                       ("3", "Check library"), ("4", "Want to read"), ("q", "Quit")]:
         print(f"   {accent(key)}  {label}")
     print()
 
@@ -373,7 +373,7 @@ def show_library(books):
     read = {month: max(logged.get(month, 0), 0) for month in months}
     best = max(read.values())
     pages_w = len(f"{best:,}")
-    title_w = title_width(finished, WIDTH - 51) if finished else 0
+    title_w = title_width(finished, WIDTH - 55) if finished else 0
     mark_best = sum(1 for pages in read.values() if pages) > 1
 
     quiet = []  # months in a row with nothing logged, shown as a single line
@@ -396,8 +396,8 @@ def show_library(books):
                 row += "  " + dim(plural(days, "day").rjust(8))
             print(row)
             if book.get("comment"):
-                for text in textwrap.wrap(f"“{book['comment']}”", WIDTH - 24):
-                    print(" " * 23 + quote(text))
+                for text in textwrap.wrap(f"“{book['comment']}”", WIDTH - 28):
+                    print(" " * 27 + quote(text))
         print()
 
     # Totals.
@@ -423,12 +423,129 @@ def show_quiet(months):
     print(f"   {dim(span + ' · nothing logged')}\n")
 
 
+# ── Want to read ─────────────────────────────────────────────────────────────
+# Books you'd like to read but haven't started. They're kept in their own file,
+# so the rest of the app only sees a book once you start reading it.
+
+WANT_FILE = DATA_FILE.with_name(DATA_FILE.stem + "_want_to_read.json")
+
+
+def load_want():
+    if not WANT_FILE.exists():
+        return []
+    try:
+        return json.loads(WANT_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        sys.exit(f"Could not read {WANT_FILE}: {error}")
+
+
+def save_want(want):
+    temp = WANT_FILE.with_suffix(".tmp")
+    temp.write_text(json.dumps(want, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp.replace(WANT_FILE)
+
+
+def want_line(item, title_w):
+    pages = f"{item['total_pages']:,} pages" if item.get("total_pages") else "? pages"
+    return f"{fit(item['title'], title_w)}  {dim(pages.rjust(11))}  {dim('added ' + long_date(item['added']))}"
+
+
+def want_to_read(books):
+    """Menu option 4: see the list, add a book, start one or remove one."""
+    rule("Want to read")
+    want = load_want()
+    if not want:
+        note("Nothing on your list yet. Add the first one:")
+        print()
+        add_want(want)
+        return
+
+    title_w = title_width(want, WIDTH - 39)
+    for number, item in enumerate(want, 1):
+        print(f"  {accent(f'{number:>3}')}  {want_line(item, title_w)}")
+    print()
+    print("  " + dim("  ·  ").join([f"{accent('a')} {dim('add a book')}",
+                                      f"{accent('1')} {dim('start reading book 1')}",
+                                      f"{accent('d1')} {dim('remove book 1')}"]))
+    while True:
+        choice = ask("Choose", "Enter = back").lower().replace(" ", "")
+        if not choice:
+            return
+        if choice == "a":
+            print()
+            add_want(want)
+            return
+        remove = choice.startswith("d")
+        number = choice[1:] if remove else choice
+        if number.isdigit() and 1 <= int(number) <= len(want):
+            print()
+            (remove_want if remove else start_want)(books, want, want[int(number) - 1])
+            return
+        warn(f"Please type a, a number from 1 to {len(want)}, or d and a number.")
+
+
+def add_want(want):
+    title = ask("Title", "Enter = back")
+    if not title:
+        return
+    total = ask_int("Total pages", 1, hint="Enter = don't know", optional=True)
+    want.append({"title": title, "total_pages": total, "added": date.today().isoformat()})
+    save_want(want)
+    print()
+    ok(f"Added {bold(title)} to your want-to-read list")
+
+
+def start_want(books, want, item):
+    """Move a book from the list into the library, as a book you're reading."""
+    print(f"  {bold(item['title'])}  {dim('· start reading')}")
+    total = item.get("total_pages") or ask_int("Total pages", 1)
+    day = ask_date("Started on").isoformat()
+    books.append({
+        "title": item["title"],
+        "started": day,
+        "finished": None,
+        "total_pages": total,
+        "current_page": 0,
+        "rating": None,
+        "comment": "",
+        "log": [{"date": day, "page": 0}],
+    })
+    save_books(books)
+    want.remove(item)
+    save_want(want)
+    print()
+    ok(f"Started {bold(item['title'])} on {long_date(day)} · log your pages with 2")
+
+
+def remove_want(books, want, item):
+    want.remove(item)
+    save_want(want)
+    ok(f"Removed {bold(item['title'])} from your list")
+
+
+def show_want_section(want):
+    """The want-to-read shelf, shown at the end of the library."""
+    rule("Want to read")
+    title_w = title_width(want, WIDTH - 35)
+    for item in want:
+        print(f"   {want_line(item, title_w)}")
+
+
+def check_library(books):
+    """Menu option 3: the library as before, plus the want-to-read section."""
+    want = load_want()
+    if books or not want:
+        show_library(books)
+    if want:
+        show_want_section(want)
+
+
 # ── Main loop ────────────────────────────────────────────────────────────────
 
 def main():
     books = load_books()
     banner()
-    actions = {"1": add_book, "2": update_progress, "3": show_library}
+    actions = {"1": add_book, "2": update_progress, "3": check_library, "4": want_to_read}
     while True:
         show_menu(books)
         try:
@@ -446,7 +563,7 @@ def main():
             except EOFError:
                 break
         elif choice:
-            warn("Please choose 1, 2, 3 or q.")
+            warn("Please choose 1, 2, 3, 4 or q.")
     print()
     note("Happy reading!")
     print()

@@ -1,6 +1,6 @@
 # BookTracker
 
-A small terminal app to keep track of your reading: what you're reading now, how far along you are, and month by month how much you've read.
+A small terminal app to keep track of your reading: what you're reading now, how far along you are, month by month how much you've read, and the books you want to read next.
 
 ## Requirements
 
@@ -22,12 +22,15 @@ You'll see the menu:
    1  Add a new book
    2  Update progress
    3  Check library
+   4  Want to read
    q  Quit
 
   ›
 ```
 
 Type a number (or `q`) and press Enter.
+
+All dates are shown and typed as **DD/MM/YYYY**.
 
 ## 1 · Add a new book
 
@@ -36,7 +39,7 @@ Type a number (or `q`) and press Enter.
 | **Title** | The book's title. Press Enter on its own to go back to the menu. |
 | **Total pages** | The number of pages in the book. |
 | **Current page** | The page you're on. Press Enter for 0, or type `-1` if you've already finished it. |
-| **Started on** | The date as `YYYY-MM-DD` (`DD/MM/YYYY` works too). Press Enter for today. |
+| **Started on** | The date as `DD/MM/YYYY`, e.g. `14/09/2026`. Press Enter for today. |
 
 If you add a book you've already finished (current page = last page, or `-1`), the date question becomes **Finished on**, and you're asked for a review, just like below.
 
@@ -61,18 +64,18 @@ Press Enter to skip either one. Typed a page by mistake? Just update again with 
 ```
   ── READING NOW ─────────────────────────────────────────────────────────────
 
-   Project Hail Mary     ███████████░░░░░   71%  340/476  since 12 Sep 2026
-   The Name of the Wind  █░░░░░░░░░░░░░░░    9%   66/662  since 28 Sep 2026
+   Project Hail Mary     ███████████░░░░░   71%  340/476  since 12/09/2026
+   The Name of the Wind  █░░░░░░░░░░░░░░░    9%   66/662  since 28/09/2026
 
   ── MONTH BY MONTH ──────────────────────────────────────────────────────────
 
    Jul 2026  █████░░░░░░░░░░░░░░░░░░░  140 pages
 
    Aug 2026  ████████████████████████  582 pages  ← best month
-             ✔  3 Aug  The Hobbit    ★★★★★★★★☆☆  8/10   15 days
-                       “Cosy.”
-             ✔ 21 Aug  Dune          ★★★★★★★★★☆  9/10   17 days
-                       “Spice must flow.”
+             ✔ 03/08/2026  The Hobbit    ★★★★★★★★☆☆  8/10   15 days
+                           “Cosy.”
+             ✔ 21/08/2026  Dune          ★★★★★★★★★☆  9/10   17 days
+                           “Spice must flow.”
 
    Sep 2026  ████████████░░░░░░░░░░░░  300 pages
 
@@ -80,13 +83,42 @@ Press Enter to skip either one. Typed a page by mistake? Just update again with 
 
   ────────────────────────────────────────────────────────────────────────────
    4 books · 2 finished · 1,128 pages read · 8.5 average rating
+
+  ── WANT TO READ ────────────────────────────────────────────────────────────
+
+   Babel           545 pages  added 14/09/2026
+   Middlemarch       ? pages  added 30/09/2026
 ```
 
 - **Reading now**: every book in progress, with how far along you are and when you started.
 - **Month by month**: one bar per month for the pages you read, so your strongest periods stand out (the best one is marked). Under each month are the books you finished then, with the date, your rating, how many days it took and your comment. A stretch of months with no reading is folded into a single line, like `Feb – Apr 2026 · nothing logged`.
-- **Totals** at the bottom.
+- **Totals** for the books you've read.
+- **Want to read**: your list of books for later (see below). It only appears once the list has something on it.
 
 In the terminal it's all in colour.
+
+## 4 · Want to read
+
+A list of books you'd like to read but haven't started. They're kept apart from your reading: they don't count as "reading", and they don't show up in Update progress.
+
+The first time, you go straight to adding a book. After that, you see your list:
+
+```
+  ── WANT TO READ ────────────────────────────────────────────────────────────
+
+    1  Babel           545 pages  added 14/09/2026
+    2  Middlemarch       ? pages  added 30/09/2026
+
+  a add a book  ·  1 start reading book 1  ·  d1 remove book 1
+  Choose (Enter = back) ›
+```
+
+| Type | What happens |
+|---|---|
+| `a` | Add a book: the title, and the total pages (press Enter if you don't know them yet). The date added is today. |
+| a number, e.g. `1` | **Start reading** that book. You're asked the start date (Enter = today), plus the total pages if you skipped them. The book moves from this list to *Reading now* at page 0, and from then on you use option 2 to log progress, as with any other book. |
+| `d` + a number, e.g. `d2` | Remove that book from the list. |
+| Enter | Back to the menu. |
 
 ## How pages per month are counted
 
@@ -119,7 +151,18 @@ Everything is saved in `library.json`, next to the script, after every change. I
 
 `started` is `null` for books you added as already finished, since the start date isn't known (which is also why they show no "days" in the library).
 
-To keep the library somewhere else, set `BOOKTRACKER_FILE`:
+Inside the files, dates are stored as `YYYY-MM-DD` so they sort correctly; the app always shows them to you as DD/MM/YYYY.
+
+Your want-to-read list lives in its own file, `library_want_to_read.json`, next to `library.json`:
+
+```json
+[
+  {"title": "Babel", "total_pages": 545, "added": "2026-09-14"},
+  {"title": "Middlemarch", "total_pages": null, "added": "2026-09-30"}
+]
+```
+
+To keep the library somewhere else, set `BOOKTRACKER_FILE`. The want-to-read file follows it (here, `books_want_to_read.json` in the same folder):
 
 ```
 BOOKTRACKER_FILE=~/Dropbox/books.json python3 booktracker.py
